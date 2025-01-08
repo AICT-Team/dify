@@ -9,6 +9,7 @@ import OutputPanel from './output-panel'
 import ResultPanel from './result-panel'
 import TracingPanel from './tracing-panel'
 import IterationResultPanel from './iteration-result-panel'
+import LoopResultPanel from './loop-result-panel'
 import RetryResultPanel from './retry-result-panel'
 import cn from '@/utils/classnames'
 import { ToastContext } from '@/app/components/base/toast'
@@ -65,7 +66,7 @@ const RunPanel: FC<RunProps> = ({ hideResult, activeTab = 'RESULT', runID, getRe
     const result: NodeTracing[] = []
     const nodeGroupMap = new Map<string, Map<string, NodeTracing[]>>()
 
-    const processIterationNode = (item: NodeTracing) => {
+    const processIterationOrLoopNode = (item: NodeTracing) => {
       result.push({
         ...item,
         details: [],
@@ -164,8 +165,8 @@ const RunPanel: FC<RunProps> = ({ hideResult, activeTab = 'RESULT', runID, getRe
     }
 
     allItems.forEach((item) => {
-      item.node_type === BlockEnum.Iteration
-        ? processIterationNode(item)
+      [BlockEnum.Iteration, BlockEnum.Loop].includes(item.node_type)
+        ? processIterationOrLoopNode(item)
         : processNonIterationNode(item)
     })
 
@@ -220,12 +221,20 @@ const RunPanel: FC<RunProps> = ({ hideResult, activeTab = 'RESULT', runID, getRe
   }, [loading])
 
   const [iterationRunResult, setIterationRunResult] = useState<NodeTracing[][]>([])
+  const [loopRunResult, setLoopRunResult] = useState<NodeTracing[][]>([])
   const [iterDurationMap, setIterDurationMap] = useState<IterationDurationMap>({})
   const [retryRunResult, setRetryRunResult] = useState<NodeTracing[]>([])
+
   const [isShowIterationDetail, {
     setTrue: doShowIterationDetail,
     setFalse: doHideIterationDetail,
   }] = useBoolean(false)
+
+  const [isShowLoopDetail, {
+    setTrue: doShowLoopDetail,
+    setFalse: doHideLoopDetail,
+  }] = useBoolean(false)
+
   const [isShowRetryDetail, {
     setTrue: doShowRetryDetail,
     setFalse: doHideRetryDetail,
@@ -236,6 +245,11 @@ const RunPanel: FC<RunProps> = ({ hideResult, activeTab = 'RESULT', runID, getRe
     doShowIterationDetail()
     setIterDurationMap(iterDurationMap)
   }, [doShowIterationDetail, setIterationRunResult, setIterDurationMap])
+
+  const handleShowLoopDetail = useCallback((detail: NodeTracing[][]) => {
+    setLoopRunResult(detail)
+    doShowLoopDetail()
+  }, [doShowLoopDetail])
 
   const handleShowRetryDetail = useCallback((detail: NodeTracing[]) => {
     setRetryRunResult(detail)
@@ -250,6 +264,18 @@ const RunPanel: FC<RunProps> = ({ hideResult, activeTab = 'RESULT', runID, getRe
           onHide={doHideIterationDetail}
           onBack={doHideIterationDetail}
           iterDurationMap={iterDurationMap}
+        />
+      </div>
+    )
+  }
+
+  if (isShowLoopDetail) {
+    return (
+      <div className='grow relative flex flex-col'>
+        <LoopResultPanel
+          list={loopRunResult}
+          onHide={doHideLoopDetail}
+          onBack={doHideLoopDetail}
         />
       </div>
     )
@@ -316,6 +342,7 @@ const RunPanel: FC<RunProps> = ({ hideResult, activeTab = 'RESULT', runID, getRe
             className='bg-background-section-burn'
             list={list}
             onShowIterationDetail={handleShowIterationDetail}
+            onShowLoopDetail={handleShowLoopDetail}
             onShowRetryDetail={handleShowRetryDetail}
           />
         )}

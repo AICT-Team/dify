@@ -112,6 +112,9 @@ export const useWorkflowRun = () => {
       onIterationStart,
       onIterationNext,
       onIterationFinish,
+      onLoopStart,
+      onLoopNext,
+      onLoopFinish,
       onNodeRetry,
       onError,
       ...restCallback
@@ -157,7 +160,7 @@ export const useWorkflowRun = () => {
       else
         ttsUrl = `/apps/${params.appId}/text-to-audio`
     }
-    const player = AudioPlayerManager.getInstance().getAudioPlayer(ttsUrl, ttsIsPublic, uuidV4(), 'none', 'none', (_: any): any => {})
+    const player = AudioPlayerManager.getInstance().getAudioPlayer(ttsUrl, ttsIsPublic, uuidV4(), 'none', 'none', (_: any): any => { })
 
     ssePost(
       url,
@@ -272,13 +275,26 @@ export const useWorkflowRun = () => {
           if (node?.parentId) {
             setWorkflowRunningData(produce(workflowRunningData!, (draft) => {
               const tracing = draft.tracing!
-              const iterations = tracing.find(trace => trace.node_id === node?.parentId)
+              const iterations = tracing.find(trace => trace.node_id === node?.parentId && trace.node_type === BlockEnum.Iteration)
               const currIteration = iterations?.details![node.data.iteration_index] || iterations?.details![iterations.details!.length - 1]
+
+              const loops = tracing.find(trace => trace.node_id === node?.parentId && trace.node_type === BlockEnum.Loop)
+              const currLoop = loops?.details![node.data.loop_index] || loops?.details![loops.details!.length - 1]
+
               if (!data.parallel_run_id) {
-                currIteration?.push({
-                  ...data,
-                  status: NodeRunningStatus.Running,
-                } as any)
+                if (data.iteration_id) {
+                  currIteration?.push({
+                    ...data,
+                    status: NodeRunningStatus.Running,
+                  } as any)
+                }
+
+                if (data.loop_id) {
+                  currLoop?.push({
+                    ...data,
+                    status: NodeRunningStatus.Running,
+                  } as any)
+                }
               }
               else {
                 const nodeId = iterations?.node_id as string
@@ -369,7 +385,7 @@ export const useWorkflowRun = () => {
             if (!data.execution_metadata.parallel_mode_run_id) {
               setWorkflowRunningData(produce(workflowRunningData!, (draft) => {
                 const tracing = draft.tracing!
-                const iterations = tracing.find(trace => trace.node_id === nodeParentId) // the iteration node
+                const iterations = tracing.find(trace => trace.node_id === nodeParentId && trace.node_type === BlockEnum.Iteration) // the iteration node
 
                 if (iterations && iterations.details) {
                   const iterationIndex = data.execution_metadata?.iteration_index || 0
@@ -394,6 +410,36 @@ export const useWorkflowRun = () => {
                     currIteration.push({
                       ...data,
                     } as any)
+                  }
+                }
+
+                const loops = tracing.find(trace => trace.node_id === nodeParentId && trace.node_type === BlockEnum.Loop) // the loop node
+                if (loops && loops.details) {
+                  const loopIndex = data.execution_metadata?.loop_index || 0
+                  if (!loops.details[loopIndex])
+                    loops.details[loopIndex] = []
+
+                  const currLoop = loops.details[loopIndex]
+                  const nodeIndex = currLoop.findIndex(node =>
+                    node.node_id === data.node_id && (
+                      node.execution_metadata?.parallel_id === data.execution_metadata?.parallel_id || node.parallel_id === data.execution_metadata?.parallel_id),
+                  )
+                  if (data.status === NodeRunningStatus.Succeeded) {
+                    if (nodeIndex !== -1) {
+                      currLoop[nodeIndex] = {
+                        ...currLoop[nodeIndex],
+
+                        ...(currLoop[nodeIndex].retryDetail
+                          ? { retryDetail: currLoop[nodeIndex].retryDetail }
+                          : {}),
+                        ...data,
+                      } as any
+                    }
+                    else {
+                      currLoop.push({
+                        ...data,
+                      } as any)
+                    }
                   }
                 }
               }))
@@ -621,6 +667,125 @@ export const useWorkflowRun = () => {
           if (onIterationFinish)
             onIterationFinish(params)
         },
+        onLoopStart: (params) => {
+          const { data } = params
+          const {
+            workflowRunningData,
+            setWorkflowRunningData,
+          } = workflowStore.getState()
+          const {
+            getNodes,
+            setNodes,
+            edges,
+            setEdges,
+            transform,
+          } = store.getState()
+          const nodes = getNodes()
+          setWorkflowRunningData(produce(workflowRunningData!, (draft) => {
+            draft.tracing!.push({
+              ...data,
+              status: NodeRunningStatus.Running,
+              details: [],
+            } as any)
+          }))
+
+          const {
+            setViewport,
+          } = reactflow
+          const currentNodeIndex = nodes.findIndex(node => node.id === data.node_id)
+          const currentNode = nodes[currentNodeIndex]
+          const position = currentNode.position
+          const zoom = transform[2]
+
+          if (!currentNode.parentId) {
+            setViewport({
+              x: (clientWidth - 400 - currentNode.width! * zoom) / 2 - position.x * zoom,
+              y: (clientHeight - currentNode.height! * zoom) / 2 - position.y * zoom,
+              zoom: transform[2],
+            })
+          }
+          const newNodes = produce(nodes, (draft) => {
+            draft[currentNodeIndex].data._runningStatus = NodeRunningStatus.Running
+            draft[currentNodeIndex].data._loopLength = data.metadata.loop_length
+          })
+          setNodes(newNodes)
+          const newEdges = produce(edges, (draft) => {
+            const edge = draft.find(edge => edge.target === data.node_id && edge.source === prevNodeId)
+
+            if (edge)
+              edge.data = { ...edge.data, _run: true } as any
+          })
+          setEdges(newEdges)
+
+          if (onLoopStart)
+            onLoopStart(params)
+        },
+        onLoopNext: (params) => {
+          const {
+            workflowRunningData,
+            setWorkflowRunningData,
+          } = workflowStore.getState()
+
+          const { data } = params
+          const {
+            getNodes,
+            setNodes,
+          } = store.getState()
+
+          setWorkflowRunningData(produce(workflowRunningData!, (draft) => {
+            const loop = draft.tracing!.find(trace => trace.node_id === data.node_id)
+            if (loop) {
+              if (loop.details!.length >= loop.metadata.loop_length!)
+                return
+            }
+            loop?.details!.push([])
+          }))
+          const nodes = getNodes()
+          const newNodes = produce(nodes, (draft) => {
+            const currentNode = draft.find(node => node.id === data.node_id)!
+
+            currentNode.data._loopIndex = data.index > 0 ? data.index : 1
+          })
+          setNodes(newNodes)
+
+          if (onLoopNext)
+            onLoopNext(params)
+        },
+        onLoopFinish: (params) => {
+          const { data } = params
+
+          const {
+            workflowRunningData,
+            setWorkflowRunningData,
+          } = workflowStore.getState()
+          const {
+            getNodes,
+            setNodes,
+          } = store.getState()
+          const nodes = getNodes()
+          setWorkflowRunningData(produce(workflowRunningData!, (draft) => {
+            const tracing = draft.tracing!
+            const currLoopNode = tracing.find(trace => trace.node_id === data.node_id)
+            if (currLoopNode) {
+              Object.assign(currLoopNode, {
+                ...data,
+                status: NodeRunningStatus.Succeeded,
+              })
+            }
+          }))
+
+          const newNodes = produce(nodes, (draft) => {
+            const currentNode = draft.find(node => node.id === data.node_id)!
+
+            currentNode.data._runningStatus = data.status
+          })
+          setNodes(newNodes)
+
+          prevNodeId = data.node_id
+
+          if (onLoopFinish)
+            onLoopFinish(params)
+        },
         onNodeRetry: (params) => {
           const { data } = params
           const {
@@ -641,10 +806,23 @@ export const useWorkflowRun = () => {
             if (!data.execution_metadata.parallel_mode_run_id) {
               setWorkflowRunningData(produce(workflowRunningData!, (draft) => {
                 const tracing = draft.tracing!
-                const iteration = tracing.find(trace => trace.node_id === nodeParent.id)
+                const iteration = tracing.find(trace => trace.node_id === nodeParent.id && trace.node_type === BlockEnum.Iteration)
 
                 if (iteration && iteration.details?.length) {
                   const currentNodeRetry = iteration.details[nodeParent.data._iterationIndex - 1]?.find(item => item.node_id === data.node_id)
+
+                  if (currentNodeRetry) {
+                    if (currentNodeRetry?.retryDetail)
+                      currentNodeRetry?.retryDetail.push(data as NodeTracing)
+                    else
+                      currentNodeRetry.retryDetail = [data as NodeTracing]
+                  }
+                }
+
+                const loop = tracing.find(trace => trace.node_id === nodeParent.id && trace.node_type === BlockEnum.Loop)
+
+                if (loop && loop.details?.length) {
+                  const currentNodeRetry = loop.details[nodeParent.data._loopIndex - 1]?.find(item => item.node_id === data.node_id)
 
                   if (currentNodeRetry) {
                     if (currentNodeRetry?.retryDetail)

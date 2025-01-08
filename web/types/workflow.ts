@@ -23,6 +23,8 @@ export type NodeTracing = {
     currency: string
     iteration_id?: string
     iteration_index?: number
+    loop_id?: string
+    loop_index?: number
     parallel_id?: string
     parallel_start_node_id?: string
     parent_parallel_id?: string
@@ -34,6 +36,8 @@ export type NodeTracing = {
   metadata: {
     iterator_length: number
     iterator_index: number
+    loop_length: number
+    loop_index: number
   }
   created_at: number
   created_by: {
@@ -132,6 +136,7 @@ export type NodeStartedResponse = {
     id: string
     node_id: string
     iteration_id?: string
+    loop_id?: string
     parallel_run_id?: string
     node_type: string
     index: number
@@ -161,6 +166,7 @@ export type NodeFinishedResponse = {
     id: string
     node_id: string
     iteration_id?: string
+    loop_id?: string
     node_type: string
     index: number
     predecessor_node_id?: string
@@ -178,6 +184,8 @@ export type NodeFinishedResponse = {
       parallel_start_node_id?: string
       iteration_index?: number
       iteration_id?: string
+      loop_index?: number
+      loop_id?: string
       parallel_mode_run_id: string
       error_strategy?: ErrorHandleTypeEnum
     }
@@ -243,6 +251,61 @@ export type IterationFinishedResponse = {
   }
 }
 
+export type LoopStartedResponse = {
+  task_id: string
+  workflow_run_id: string
+  event: string
+  data: {
+    id: string
+    node_id: string
+    metadata: {
+      loop_length: number
+      loop_id: string
+      loop_index: number
+    }
+    created_at: number
+    extras?: any
+  }
+}
+
+export type LoopNextResponse = {
+  task_id: string
+  workflow_run_id: string
+  event: string
+  data: {
+    id: string
+    node_id: string
+    index: number
+    output: any
+    extras?: any
+    created_at: number
+    execution_metadata: {
+      parallel_id?: string
+    }
+  }
+}
+
+export type LoopFinishedResponse = {
+  task_id: string
+  workflow_run_id: string
+  event: string
+  data: {
+    id: string
+    node_id: string
+    outputs: any
+    extras?: any
+    status: string
+    created_at: number
+    error: string
+    execution_metadata: {
+      parallel_id?: string
+    }
+    inputs: {
+      loop_count: number
+    }
+  }
+}
+
 export type ParallelBranchStartedResponse = {
   task_id: string
   workflow_run_id: string
@@ -253,6 +316,7 @@ export type ParallelBranchStartedResponse = {
     parent_parallel_id: string
     parent_parallel_start_node_id: string
     iteration_id?: string
+    loop_id?: string
     created_at: number
   }
 }
@@ -267,6 +331,7 @@ export type ParallelBranchFinishedResponse = {
     parent_parallel_id: string
     parent_parallel_start_node_id: string
     iteration_id?: string
+    loop_id?: string
     status: string
     created_at: number
     error: string

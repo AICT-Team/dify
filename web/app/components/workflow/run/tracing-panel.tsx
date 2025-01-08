@@ -21,6 +21,7 @@ import type { IterationDurationMap, NodeTracing } from '@/types/workflow'
 type TracingPanelProps = {
   list: NodeTracing[]
   onShowIterationDetail?: (detail: NodeTracing[][], iterDurationMap: IterationDurationMap) => void
+  onShowLoopDetail?: (detail: NodeTracing[][]) => void
   onShowRetryDetail?: (detail: NodeTracing[]) => void
   className?: string
   hideNodeInfo?: boolean
@@ -161,6 +162,7 @@ function buildLogTree(nodes: NodeTracing[], t: (key: string) => string): Tracing
 const TracingPanel: FC<TracingPanelProps> = ({
   list,
   onShowIterationDetail,
+  onShowLoopDetail,
   onShowRetryDetail,
   className,
   hideNodeInfo = false,
@@ -254,7 +256,9 @@ const TracingPanel: FC<TracingPanelProps> = ({
             nodeInfo={node.data!}
             onShowIterationDetail={onShowIterationDetail}
             onShowRetryDetail={onShowRetryDetail}
+            onShowLoopDetail={onShowLoopDetail}
             justShowIterationNavArrow={true}
+            justShowLoopNavArrow={true}
             justShowRetryNavArrow={true}
             hideInfo={hideNodeInfo}
             hideProcessDetail={hideNodeProcessDetail}

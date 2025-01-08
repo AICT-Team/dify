@@ -13,7 +13,7 @@ import {
 import BlockIcon from '../block-icon'
 import { BlockEnum } from '../types'
 import Split from '../nodes/_base/components/split'
-import { Iteration } from '@/app/components/base/icons/src/vender/workflow'
+import { Iteration, Loop } from '@/app/components/base/icons/src/vender/workflow'
 import cn from '@/utils/classnames'
 import StatusContainer from '@/app/components/workflow/run/status-container'
 import CodeEditor from '@/app/components/workflow/nodes/_base/components/editor/code-editor'
@@ -30,9 +30,12 @@ type Props = {
   hideInfo?: boolean
   hideProcessDetail?: boolean
   onShowIterationDetail?: (detail: NodeTracing[][], iterDurationMap: IterationDurationMap) => void
+  onShowLoopDetail?: (detail: NodeTracing[][]) => void
   onShowRetryDetail?: (detail: NodeTracing[]) => void
   notShowIterationNav?: boolean
+  notShowLoopNav?: boolean
   justShowIterationNavArrow?: boolean
+  justShowLoopNavArrow?: boolean
   justShowRetryNavArrow?: boolean
 }
 
@@ -43,9 +46,12 @@ const NodePanel: FC<Props> = ({
   hideInfo = false,
   hideProcessDetail,
   onShowIterationDetail,
+  onShowLoopDetail,
   onShowRetryDetail,
   notShowIterationNav,
+  notShowLoopNav,
   justShowIterationNavArrow,
+  justShowLoopNavArrow,
 }) => {
   const [collapseState, doSetCollapseState] = useState<boolean>(true)
   const setCollapseState = useCallback((state: boolean) => {
@@ -72,12 +78,20 @@ const NodePanel: FC<Props> = ({
       return `${parseFloat((tokens / 1000000).toFixed(3))}M`
   }
 
-  const getCount = (iteration_curr_length: number | undefined, iteration_length: number) => {
+  const getIterationCount = (iteration_curr_length: number | undefined, iteration_length: number) => {
     if ((iteration_curr_length && iteration_curr_length < iteration_length) || !iteration_length)
       return iteration_curr_length
 
     return iteration_length
   }
+
+  const getLoopCount = (loop_curr_length: number | undefined, loop_length: number) => {
+    if ((loop_curr_length && loop_curr_length < loop_length) || !loop_length)
+      return loop_curr_length
+
+    return loop_length
+  }
+
   const getErrorCount = (details: NodeTracing[][] | undefined) => {
     if (!details || details.length === 0)
       return 0
@@ -93,12 +107,21 @@ const NodePanel: FC<Props> = ({
   }, [nodeInfo.expand, setCollapseState])
 
   const isIterationNode = nodeInfo.node_type === BlockEnum.Iteration
+  const isLoopNode = nodeInfo.node_type === BlockEnum.Loop
   const isRetryNode = hasRetryNode(nodeInfo.node_type) && nodeInfo.retryDetail
+
   const handleOnShowIterationDetail = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation()
     e.nativeEvent.stopImmediatePropagation()
     onShowIterationDetail?.(nodeInfo.details || [], nodeInfo?.iterDurationMap || nodeInfo.execution_metadata?.iteration_duration_map || {})
   }
+
+  const handleOnShowLoopDetail = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation()
+    e.nativeEvent.stopImmediatePropagation()
+    onShowLoopDetail?.(nodeInfo.details || [])
+  }
+
   const handleOnShowRetryDetail = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation()
     e.nativeEvent.stopImmediatePropagation()
@@ -160,7 +183,7 @@ const NodePanel: FC<Props> = ({
                   onClick={handleOnShowIterationDetail}
                 >
                   <Iteration className='w-4 h-4 text-components-button-tertiary-text flex-shrink-0' />
-                  <div className='flex-1 text-left system-sm-medium text-components-button-tertiary-text'>{t('workflow.nodes.iteration.iteration', { count: getCount(nodeInfo.details?.length, nodeInfo.metadata?.iterator_length) })}{getErrorCount(nodeInfo.details) > 0 && (
+                  <div className='flex-1 text-left system-sm-medium text-components-button-tertiary-text'>{t('workflow.nodes.iteration.iteration', { count: getIterationCount(nodeInfo.details?.length, nodeInfo.metadata?.iterator_length) })}{getErrorCount(nodeInfo.details) > 0 && (
                     <>
                       {t('workflow.nodes.iteration.comma')}
                       {t('workflow.nodes.iteration.error', { count: getErrorCount(nodeInfo.details) })}
@@ -169,6 +192,29 @@ const NodePanel: FC<Props> = ({
                   {justShowIterationNavArrow
                     ? (
                       <RiArrowRightSLine className='w-4 h-4 text-components-button-tertiary-text flex-shrink-0' />
+                    )
+                    : (
+                      <div className='flex items-center space-x-1 text-[#155EEF]'>
+                        <div className='text-[13px] font-normal '>{t('workflow.common.viewDetailInTracingPanel')}</div>
+                        <RiArrowRightSLine className='w-4 h-4 text-components-button-tertiary-text flex-shrink-0' />
+                      </div>
+                    )}
+                </Button>
+                <Split className='mt-2' />
+              </div>
+            )}
+            {isLoopNode && !notShowLoopNav && (
+              <div className='mt-2 mb-1 !px-2'>
+                <Button
+                  className='flex items-center w-full self-stretch gap-2 px-3 py-2 bg-components-button-tertiary-bg-hover hover:bg-components-button-tertiary-bg-hover rounded-lg cursor-pointer border-none'
+                  onClick={handleOnShowLoopDetail}
+                >
+                  <Loop className='w-4 h-4 text-components-button-tertiary-text flex-shrink-0' />
+                  <div className='flex-1 text-left system-sm-medium text-components-button-tertiary-text'>{t('workflow.nodes.loop.loop_one', { count: getLoopCount(nodeInfo.details?.length, nodeInfo.metadata?.loop_length) })}</div>
+                  {justShowLoopNavArrow
+                    ? (
+                      <RiArrowRightSLine className='w-4 h-4 text-components-button-tertiary-text flex-shrink-0' />
+
                     )
                     : (
                       <div className='flex items-center space-x-1 text-[#155EEF]'>
