@@ -22,6 +22,9 @@ from core.app.entities.queue_entities import (
     QueueIterationCompletedEvent,
     QueueIterationNextEvent,
     QueueIterationStartEvent,
+    QueueLoopCompletedEvent,
+    QueueLoopNextEvent,
+    QueueLoopStartEvent,
     QueueMessageReplaceEvent,
     QueueNodeExceptionEvent,
     QueueNodeFailedEvent,
@@ -469,6 +472,54 @@ class AdvancedChatAppGenerateTaskPipeline:
                     )
 
                 yield iter_finish_resp
+            elif isinstance(event, QueueLoopStartEvent):
+                if not self._workflow_run_id:
+                    raise ValueError("workflow run not initialized.")
+
+                with Session(db.engine, expire_on_commit=False) as session:
+                    workflow_run = self._workflow_cycle_manager._get_workflow_run(
+                        session=session, workflow_run_id=self._workflow_run_id
+                    )
+                    loop_start_resp = self._workflow_cycle_manager._workflow_loop_start_to_stream_response(
+                        session=session,
+                        task_id=self._application_generate_entity.task_id,
+                        workflow_run=workflow_run,
+                        event=event,
+                    )
+
+                yield loop_start_resp
+            elif isinstance(event, QueueLoopNextEvent):
+                if not self._workflow_run_id:
+                    raise ValueError("workflow run not initialized.")
+
+                with Session(db.engine, expire_on_commit=False) as session:
+                    workflow_run = self._workflow_cycle_manager._get_workflow_run(
+                        session=session, workflow_run_id=self._workflow_run_id
+                    )
+                    loop_next_resp = self._workflow_cycle_manager._workflow_loop_next_to_stream_response(
+                        session=session,
+                        task_id=self._application_generate_entity.task_id,
+                        workflow_run=workflow_run,
+                        event=event,
+                    )
+
+                yield loop_next_resp
+            elif isinstance(event, QueueLoopCompletedEvent):
+                if not self._workflow_run_id:
+                    raise ValueError("workflow run not initialized.")
+
+                with Session(db.engine, expire_on_commit=False) as session:
+                    workflow_run = self._workflow_cycle_manager._get_workflow_run(
+                        session=session, workflow_run_id=self._workflow_run_id
+                    )
+                    loop_finish_resp = self._workflow_cycle_manager._workflow_loop_completed_to_stream_response(
+                        session=session,
+                        task_id=self._application_generate_entity.task_id,
+                        workflow_run=workflow_run,
+                        event=event,
+                    )
+
+                yield loop_finish_resp
             elif isinstance(event, QueueWorkflowSucceededEvent):
                 if not self._workflow_run_id:
                     raise ValueError("workflow run not initialized.")

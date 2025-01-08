@@ -13,6 +13,9 @@ from core.app.entities.queue_entities import (
     QueueIterationCompletedEvent,
     QueueIterationNextEvent,
     QueueIterationStartEvent,
+    QueueLoopCompletedEvent,
+    QueueLoopNextEvent,
+    QueueLoopStartEvent,
     QueueNodeExceptionEvent,
     QueueNodeFailedEvent,
     QueueNodeInIterationFailedEvent,
@@ -27,6 +30,9 @@ from core.app.entities.task_entities import (
     IterationNodeCompletedStreamResponse,
     IterationNodeNextStreamResponse,
     IterationNodeStartStreamResponse,
+    LoopNodeCompletedStreamResponse,
+    LoopNodeNextStreamResponse,
+    LoopNodeStartStreamResponse,
     NodeFinishStreamResponse,
     NodeRetryStreamResponse,
     NodeStartStreamResponse,
@@ -302,6 +308,7 @@ class WorkflowCycleManage:
             {
                 NodeRunMetadataKey.PARALLEL_MODE_RUN_ID: event.parallel_mode_run_id,
                 NodeRunMetadataKey.ITERATION_ID: event.in_iteration_id,
+                NodeRunMetadataKey.LOOP_ID: event.in_loop_id,
             }
         )
         workflow_node_execution.created_at = datetime.now(UTC).replace(tzinfo=None)
@@ -395,6 +402,7 @@ class WorkflowCycleManage:
         origin_metadata = {
             NodeRunMetadataKey.ITERATION_ID: event.in_iteration_id,
             NodeRunMetadataKey.PARALLEL_MODE_RUN_ID: event.parallel_mode_run_id,
+            NodeRunMetadataKey.LOOP_ID: event.in_loop_id,
         }
         merged_metadata = (
             {**jsonable_encoder(event.execution_metadata), **origin_metadata}
@@ -539,6 +547,7 @@ class WorkflowCycleManage:
                 parent_parallel_id=event.parent_parallel_id,
                 parent_parallel_start_node_id=event.parent_parallel_start_node_id,
                 iteration_id=event.in_iteration_id,
+                loop_id=event.in_loop_id,
                 parallel_run_id=event.parallel_mode_run_id,
             ),
         )
@@ -599,6 +608,7 @@ class WorkflowCycleManage:
                 parent_parallel_id=event.parent_parallel_id,
                 parent_parallel_start_node_id=event.parent_parallel_start_node_id,
                 iteration_id=event.in_iteration_id,
+                loop_id=event.in_loop_id,
             ),
         )
 
@@ -644,6 +654,7 @@ class WorkflowCycleManage:
                 parent_parallel_id=event.parent_parallel_id,
                 parent_parallel_start_node_id=event.parent_parallel_start_node_id,
                 iteration_id=event.in_iteration_id,
+                loop_id=event.in_loop_id,
                 retry_index=event.retry_index,
             ),
         )
@@ -662,6 +673,7 @@ class WorkflowCycleManage:
                 parent_parallel_id=event.parent_parallel_id,
                 parent_parallel_start_node_id=event.parent_parallel_start_node_id,
                 iteration_id=event.in_iteration_id,
+                loop_id=event.in_loop_id,
                 created_at=int(time.time()),
             ),
         )
@@ -685,6 +697,7 @@ class WorkflowCycleManage:
                 parent_parallel_id=event.parent_parallel_id,
                 parent_parallel_start_node_id=event.parent_parallel_start_node_id,
                 iteration_id=event.in_iteration_id,
+                loop_id=event.in_loop_id,
                 status="succeeded" if isinstance(event, QueueParallelBranchRunSucceededEvent) else "failed",
                 error=event.error if isinstance(event, QueueParallelBranchRunFailedEvent) else None,
                 created_at=int(time.time()),
@@ -746,6 +759,83 @@ class WorkflowCycleManage:
             task_id=task_id,
             workflow_run_id=workflow_run.id,
             data=IterationNodeCompletedStreamResponse.Data(
+                id=event.node_id,
+                node_id=event.node_id,
+                node_type=event.node_type.value,
+                title=event.node_data.title,
+                outputs=event.outputs,
+                created_at=int(time.time()),
+                extras={},
+                inputs=event.inputs or {},
+                status=WorkflowNodeExecutionStatus.SUCCEEDED
+                if event.error is None
+                else WorkflowNodeExecutionStatus.FAILED,
+                error=None,
+                elapsed_time=(datetime.now(UTC).replace(tzinfo=None) - event.start_at).total_seconds(),
+                total_tokens=event.metadata.get("total_tokens", 0) if event.metadata else 0,
+                execution_metadata=event.metadata,
+                finished_at=int(time.time()),
+                steps=event.steps,
+                parallel_id=event.parallel_id,
+                parallel_start_node_id=event.parallel_start_node_id,
+            ),
+        )
+
+    def _workflow_loop_start_to_stream_response(
+        self, *, session: Session, task_id: str, workflow_run: WorkflowRun, event: QueueLoopStartEvent
+    ) -> LoopNodeStartStreamResponse:
+        # receive session to make sure the workflow_run won't be expired, need a more elegant way to handle this
+        _ = session
+        return LoopNodeStartStreamResponse(
+            task_id=task_id,
+            workflow_run_id=workflow_run.id,
+            data=LoopNodeStartStreamResponse.Data(
+                id=event.node_id,
+                node_id=event.node_id,
+                node_type=event.node_type.value,
+                title=event.node_data.title,
+                created_at=int(time.time()),
+                extras={},
+                inputs=event.inputs or {},
+                metadata=event.metadata or {},
+                parallel_id=event.parallel_id,
+                parallel_start_node_id=event.parallel_start_node_id,
+            ),
+        )
+
+    def _workflow_loop_next_to_stream_response(
+        self, *, session: Session, task_id: str, workflow_run: WorkflowRun, event: QueueLoopNextEvent
+    ) -> LoopNodeNextStreamResponse:
+        # receive session to make sure the workflow_run won't be expired, need a more elegant way to handle this
+        _ = session
+        return LoopNodeNextStreamResponse(
+            task_id=task_id,
+            workflow_run_id=workflow_run.id,
+            data=LoopNodeNextStreamResponse.Data(
+                id=event.node_id,
+                node_id=event.node_id,
+                node_type=event.node_type.value,
+                title=event.node_data.title,
+                index=event.index,
+                pre_loop_output=event.output,
+                created_at=int(time.time()),
+                extras={},
+                parallel_id=event.parallel_id,
+                parallel_start_node_id=event.parallel_start_node_id,
+                parallel_mode_run_id=event.parallel_mode_run_id,
+                duration=event.duration,
+            ),
+        )
+
+    def _workflow_loop_completed_to_stream_response(
+        self, *, session: Session, task_id: str, workflow_run: WorkflowRun, event: QueueLoopCompletedEvent
+    ) -> LoopNodeCompletedStreamResponse:
+        # receive session to make sure the workflow_run won't be expired, need a more elegant way to handle this
+        _ = session
+        return LoopNodeCompletedStreamResponse(
+            task_id=task_id,
+            workflow_run_id=workflow_run.id,
+            data=LoopNodeCompletedStreamResponse.Data(
                 id=event.node_id,
                 node_id=event.node_id,
                 node_type=event.node_type.value,

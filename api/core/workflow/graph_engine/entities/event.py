@@ -62,6 +62,8 @@ class BaseNodeEvent(GraphEngineEvent):
     """parent parallel start node id if node is in parallel"""
     in_iteration_id: Optional[str] = None
     """iteration id if node is in iteration"""
+    in_loop_id: Optional[str] = None
+    """loop id if node is in loop"""
 
 
 class NodeRunStartedEvent(BaseNodeEvent):
@@ -119,6 +121,8 @@ class BaseParallelBranchEvent(GraphEngineEvent):
     """parent parallel start node id if node is in parallel"""
     in_iteration_id: Optional[str] = None
     """iteration id if node is in iteration"""
+    in_loop_id: Optional[str] = None
+    """loop id if node is in loop"""
 
 
 class ParallelBranchRunStartedEvent(BaseParallelBranchEvent):
@@ -186,4 +190,57 @@ class IterationRunFailedEvent(BaseIterationEvent):
     error: str = Field(..., description="failed reason")
 
 
-InNodeEvent = BaseNodeEvent | BaseParallelBranchEvent | BaseIterationEvent
+###########################################
+# Loop Events
+###########################################
+
+
+class BaseLoopEvent(GraphEngineEvent):
+    loop_id: str = Field(..., description="loop node execution id")
+    loop_node_id: str = Field(..., description="loop node id")
+    loop_node_type: NodeType = Field(..., description="node type, loop or loop")
+    loop_node_data: BaseNodeData = Field(..., description="node data")
+    parallel_id: Optional[str] = None
+    """parallel id if node is in parallel"""
+    parallel_start_node_id: Optional[str] = None
+    """parallel start node id if node is in parallel"""
+    parent_parallel_id: Optional[str] = None
+    """parent parallel id if node is in parallel"""
+    parent_parallel_start_node_id: Optional[str] = None
+    """parent parallel start node id if node is in parallel"""
+    parallel_mode_run_id: Optional[str] = None
+    """loop run in parallel mode run id"""
+
+
+class LoopRunStartedEvent(BaseLoopEvent):
+    start_at: datetime = Field(..., description="start at")
+    inputs: Optional[Mapping[str, Any]] = None
+    metadata: Optional[Mapping[str, Any]] = None
+    predecessor_node_id: Optional[str] = None
+
+
+class LoopRunNextEvent(BaseLoopEvent):
+    index: int = Field(..., description="index")
+    pre_loop_output: Optional[Any] = Field(None, description="pre loop output")
+    duration: Optional[float] = Field(None, description="duration")
+
+
+class LoopRunSucceededEvent(BaseLoopEvent):
+    start_at: datetime = Field(..., description="start at")
+    inputs: Optional[Mapping[str, Any]] = None
+    outputs: Optional[Mapping[str, Any]] = None
+    metadata: Optional[Mapping[str, Any]] = None
+    steps: int = 0
+    loop_duration_map: Optional[dict[str, float]] = None
+
+
+class LoopRunFailedEvent(BaseLoopEvent):
+    start_at: datetime = Field(..., description="start at")
+    inputs: Optional[Mapping[str, Any]] = None
+    outputs: Optional[Mapping[str, Any]] = None
+    metadata: Optional[Mapping[str, Any]] = None
+    steps: int = 0
+    error: str = Field(..., description="failed reason")
+
+
+InNodeEvent = BaseNodeEvent | BaseParallelBranchEvent | BaseIterationEvent | BaseLoopEvent

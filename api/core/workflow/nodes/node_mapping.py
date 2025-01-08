@@ -9,11 +9,13 @@ from core.workflow.nodes.enums import NodeType
 from core.workflow.nodes.http_request import HttpRequestNode
 from core.workflow.nodes.if_else import IfElseNode
 from core.workflow.nodes.iteration import IterationNode, IterationStartNode
+from core.workflow.nodes.loop import LoopNode, LoopStartNode
 from core.workflow.nodes.knowledge_retrieval import KnowledgeRetrievalNode
 from core.workflow.nodes.list_operator import ListOperatorNode
 from core.workflow.nodes.llm import LLMNode
 from core.workflow.nodes.parameter_extractor import ParameterExtractorNode
 from core.workflow.nodes.question_classifier import QuestionClassifierNode
+from core.workflow.nodes.sleep import SleepNode
 from core.workflow.nodes.start import StartNode
 from core.workflow.nodes.template_transform import TemplateTransformNode
 from core.workflow.nodes.tool import ToolNode
@@ -84,6 +86,14 @@ NODE_TYPE_CLASSES_MAPPING: Mapping[NodeType, Mapping[str, type[BaseNode]]] = {
         LATEST_VERSION: IterationStartNode,
         "1": IterationStartNode,
     },
+    NodeType.LOOP: {
+        LATEST_VERSION: LoopNode,
+        "1": LoopNode,
+    },
+    NodeType.LOOP_START: {
+        LATEST_VERSION: LoopStartNode,
+        "1": LoopStartNode,
+    },
     NodeType.PARAMETER_EXTRACTOR: {
         LATEST_VERSION: ParameterExtractorNode,
         "1": ParameterExtractorNode,
@@ -100,5 +110,9 @@ NODE_TYPE_CLASSES_MAPPING: Mapping[NodeType, Mapping[str, type[BaseNode]]] = {
     NodeType.LIST_OPERATOR: {
         LATEST_VERSION: ListOperatorNode,
         "1": ListOperatorNode,
+    },
+    NodeType.SLEEP: {
+        LATEST_VERSION: SleepNode,
+        "1": SleepNode,
     },
 }

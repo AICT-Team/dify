@@ -15,13 +15,15 @@ class NodeType(StrEnum):
     TOOL = "tool"
     VARIABLE_AGGREGATOR = "variable-aggregator"
     LEGACY_VARIABLE_AGGREGATOR = "variable-assigner"  # TODO: Merge this into VARIABLE_AGGREGATOR in the database.
-    LOOP = "loop"
     ITERATION = "iteration"
     ITERATION_START = "iteration-start"  # Fake start node for iteration.
+    LOOP = "loop"
+    LOOP_START = "loop-start"
     PARAMETER_EXTRACTOR = "parameter-extractor"
     VARIABLE_ASSIGNER = "assigner"
     DOCUMENT_EXTRACTOR = "document-extractor"
     LIST_OPERATOR = "list-operator"
+    SLEEP = "sleep"
 
 
 class ErrorStrategy(StrEnum):
