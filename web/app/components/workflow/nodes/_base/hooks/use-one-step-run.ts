@@ -13,7 +13,7 @@ import type { CommonNodeType, InputVar, ValueSelector, Var, Variable } from '@/a
 import { BlockEnum, InputVarType, NodeRunningStatus, VarType } from '@/app/components/workflow/types'
 import { useStore as useAppStore } from '@/app/components/app/store'
 import { useStore, useWorkflowStore } from '@/app/components/workflow/store'
-import { getIterationSingleNodeRunUrl, singleNodeRun } from '@/service/workflow'
+import { getIterationSingleNodeRunUrl, getLoopSingleNodeRunUrl, singleNodeRun } from '@/service/workflow'
 import Toast from '@/app/components/base/toast'
 import LLMDefault from '@/app/components/workflow/nodes/llm/default'
 import KnowledgeRetrievalDefault from '@/app/components/workflow/nodes/knowledge-retrieval/default'
@@ -28,6 +28,7 @@ import Assigner from '@/app/components/workflow/nodes/assigner/default'
 import ParameterExtractorDefault from '@/app/components/workflow/nodes/parameter-extractor/default'
 import IterationDefault from '@/app/components/workflow/nodes/iteration/default'
 import DocumentExtractorDefault from '@/app/components/workflow/nodes/document-extractor/default'
+import LoopDefault from '@/app/components/workflow/nodes/loop/default'
 import { ssePost } from '@/service/base'
 
 import { getInputVars as doGetInputVars } from '@/app/components/base/prompt-editor/constants'
@@ -45,6 +46,7 @@ const { checkValid: checkAssignerValid } = Assigner
 const { checkValid: checkParameterExtractorValid } = ParameterExtractorDefault
 const { checkValid: checkIterationValid } = IterationDefault
 const { checkValid: checkDocumentExtractorValid } = DocumentExtractorDefault
+const { checkValid: checkLoopValid } = LoopDefault
 
 const checkValidFns: Record<BlockEnum, Function> = {
   [BlockEnum.LLM]: checkLLMValid,
@@ -60,6 +62,7 @@ const checkValidFns: Record<BlockEnum, Function> = {
   [BlockEnum.ParameterExtractor]: checkParameterExtractorValid,
   [BlockEnum.Iteration]: checkIterationValid,
   [BlockEnum.DocExtractor]: checkDocumentExtractorValid,
+  [BlockEnum.Loop]: checkLoopValid,
 } as any
 
 type Params<T> = {
@@ -68,6 +71,7 @@ type Params<T> = {
   defaultRunInputData: Record<string, any>
   moreDataForCheckValid?: any
   iteratorInputKey?: string
+  loopInputKey?: string
 }
 
 const varTypeToInputVarType = (type: VarType, {
@@ -105,6 +109,7 @@ const useOneStepRun = <T>({
   const conversationVariables = useStore(s => s.conversationVariables)
   const isChatMode = useIsChatMode()
   const isIteration = data.type === BlockEnum.Iteration
+  const isLoop = data.type === BlockEnum.Loop
 
   const availableNodes = getBeforeNodesInSameBranch(id)
   const availableNodesIncludeParent = getBeforeNodesInSameBranchIncludeParent(id)
@@ -145,6 +150,7 @@ const useOneStepRun = <T>({
   const [canShowSingleRun, setCanShowSingleRun] = useState(false)
   const isShowSingleRun = data._isSingleRun && canShowSingleRun
   const [iterationRunResult, setIterationRunResult] = useState<NodeTracing[][]>([])
+  const [loopRunResult, setLoopRunResult] = useState<NodeTracing[][]>([])
 
   useEffect(() => {
     if (!checkValid) {
@@ -169,7 +175,7 @@ const useOneStepRun = <T>({
         })
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data._isSingleRun])
 
   const workflowStore = useWorkflowStore()
@@ -208,10 +214,10 @@ const useOneStepRun = <T>({
     })
     let res: any
     try {
-      if (!isIteration) {
+      if (!isIteration && !isLoop) {
         res = await singleNodeRun(appId!, id, { inputs: submitData }) as any
       }
-      else {
+      else if (isIteration) {
         setIterationRunResult([])
         let _iterationResult: NodeTracing[][] = []
         let _runResult: any = null
@@ -286,11 +292,90 @@ const useOneStepRun = <T>({
           },
         )
       }
+      else if (isLoop) {
+        setLoopRunResult([])
+        let _loopResult: NodeTracing[][] = []
+        let _runResult: any = null
+        ssePost(
+          getLoopSingleNodeRunUrl(isChatMode, appId!, id),
+          { body: { inputs: submitData } },
+          {
+            onWorkflowStarted: () => {
+            },
+            onWorkflowFinished: (params) => {
+              handleNodeDataUpdate({
+                id,
+                data: {
+                  ...data,
+                  _singleRunningStatus: NodeRunningStatus.Succeeded,
+                },
+              })
+              const { data: loopData } = params
+              if (!_runResult)
+                _runResult = {}
+              _runResult.created_by = loopData.created_by.name
+              setRunResult(_runResult)
+            },
+            onLoopNext: () => {
+              const newLoopRunResult = produce(_loopResult, (draft) => {
+                draft.push([])
+              })
+              _loopResult = newLoopRunResult
+              setLoopRunResult(newLoopRunResult)
+            },
+            onLoopFinish: (params) => {
+              _runResult = params.data
+              setRunResult(_runResult)
+
+              const newLoopRunResult = produce(_loopResult, (draft) => {
+                draft.splice(params.data.inputs.loop_count)
+              })
+              _loopResult = newLoopRunResult
+              setLoopRunResult(newLoopRunResult)
+            },
+            onNodeStarted: (params) => {
+              const newLoopRunResult = produce(_loopResult, (draft) => {
+                draft[draft.length - 1].push({
+                  ...params.data,
+                  status: NodeRunningStatus.Running,
+                } as NodeTracing)
+              })
+              _loopResult = newLoopRunResult
+              setLoopRunResult(newLoopRunResult)
+            },
+            onNodeFinished: (params) => {
+              const loopRunResult = _loopResult
+
+              const { data } = params
+              const currentIndex = loopRunResult[loopRunResult.length - 1].findIndex(trace => trace.node_id === data.node_id)
+              const newLoopRunResult = produce(loopRunResult, (draft) => {
+                if (currentIndex > -1) {
+                  draft[draft.length - 1][currentIndex] = {
+                    ...data,
+                    status: NodeRunningStatus.Succeeded,
+                  } as NodeTracing
+                }
+              })
+              _loopResult = newLoopRunResult
+              setLoopRunResult(newLoopRunResult)
+            },
+            onError: () => {
+              handleNodeDataUpdate({
+                id,
+                data: {
+                  ...data,
+                  _singleRunningStatus: NodeRunningStatus.Failed,
+                },
+              })
+            },
+          },
+        )
+      }
       if (res.error)
         throw new Error(res.error)
     }
     catch (e: any) {
-      if (!isIteration) {
+      if (!isIteration && !isLoop) {
         handleNodeDataUpdate({
           id,
           data: {
@@ -302,7 +387,7 @@ const useOneStepRun = <T>({
       }
     }
     finally {
-      if (!isIteration) {
+      if (!isIteration && !isLoop) {
         setRunResult({
           ...res,
           total_tokens: res.execution_metadata?.total_tokens || 0,
@@ -310,7 +395,7 @@ const useOneStepRun = <T>({
         })
       }
     }
-    if (!isIteration) {
+    if (!isIteration && !isLoop) {
       handleNodeDataUpdate({
         id,
         data: {
@@ -400,6 +485,7 @@ const useOneStepRun = <T>({
     setRunInputData,
     runResult,
     iterationRunResult,
+    loopRunResult,
   }
 }
 

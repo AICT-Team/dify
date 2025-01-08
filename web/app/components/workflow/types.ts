@@ -35,6 +35,9 @@ export enum BlockEnum {
   ListFilter = 'list-operator',
   IterationStart = 'iteration-start',
   Assigner = 'assigner', // is now named as VariableAssigner
+  Loop = 'loop',
+  LoopStart = 'loop-start',
+  Sleep = 'sleep',
 }
 
 export enum ControlMode {
@@ -78,6 +81,11 @@ export type CommonNodeType<T = {}> = {
   type: BlockEnum
   width?: number
   height?: number
+  _loopLength?: number
+  _loopIndex?: number
+  isLoopStart?: boolean
+  isInLoop?: boolean
+  loop_id?: string
   error_strategy?: ErrorHandleTypeEnum
   retry_config?: WorkflowRetryConfig
   default_value?: DefaultValueForm[]
@@ -95,6 +103,8 @@ export type CommonEdgeType = {
   iteration_id?: string
   sourceType: BlockEnum
   targetType: BlockEnum
+  isInLoop?: boolean
+  loop_id?: string
 }
 
 export type Node<T = {}> = ReactFlowNode<CommonNodeType<T>>
@@ -167,6 +177,7 @@ export enum InputVarType {
   iterator = 'iterator', // iteration input
   singleFile = 'file',
   multiFiles = 'file-list',
+  loop = 'loop', // loop input
 }
 
 export type InputVar = {
